@@ -101,6 +101,7 @@ var rpcHandlers = map[string]struct {
 	"lockunspent":            {handler: lockUnspent},
 	"sendfrom":               {handlerWithChain: sendFrom},
 	"sendmany":               {handler: sendMany},
+	"transferTransaction":    {handler: transferTransaction},
 	"sendtoaddress":          {handler: sendToAddress},
 	"settxfee":               {handler: setTxFee},
 	"signmessage":            {handler: signMessage},
@@ -1490,6 +1491,41 @@ func sendMany(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	}
 
 	return sendPairs(w, pairs, account, minConf, txrules.DefaultRelayFeePerKb)
+}
+
+func transferTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
+	cmd := icmd.(*btcjson.TransferTransactionCmd)
+	return transferToAddress(w,
+		cmd.Address, cmd.TxId,
+		waddrmgr.DefaultAccountNum, 1, txrules.DefaultRelayFeePerKb)
+}
+
+func transferToAddress(w *wallet.Wallet, addrStr string, txId string,
+	account uint32, minconf int32, feeSatPerKb btcutil.Amount) (string, error) {
+
+	txHash, err := w.TransferTx(addrStr, txId, account, minconf, feeSatPerKb)
+	if err != nil {
+		// TODO : check for tx is not found error
+		// TODO : check for tx is not mature error
+		// TODO : check for fee not enough
+
+		if waddrmgr.IsError(err, waddrmgr.ErrLocked) {
+			return "", &ErrWalletUnlockNeeded
+		}
+		switch err.(type) {
+		case btcjson.RPCError:
+			return "", err
+		}
+
+		return "", &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInternal.Code,
+			Message: err.Error(),
+		}
+	}
+
+	txHashStr := txHash.String()
+	log.Infof("Successfully transferred transaction %v", txHashStr)
+	return txHashStr, nil
 }
 
 // sendToAddress handles a sendtoaddress RPC request by creating a new
