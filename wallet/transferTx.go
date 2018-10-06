@@ -4,23 +4,57 @@ package wallet
 
 import (
 	"fmt"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
+	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/walletdb"
 	"github.com/btcsuite/btcwallet/wtxmgr"
 )
 
 // TODO : Write summary
 func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, account uint32,
-	minconf int32, feeSatPerKB btcutil.Amount) (tx *txauthor.AuthoredTx, err error) {
-	//TODO : Implement this
+	minconf int32, feeSatPerKb btcutil.Amount) (tx *txauthor.AuthoredTx, err error) {
 	fmt.Printf("txTransferToOutputs")
 
 	chainClient, err := w.requireChainClient()
 	if err != nil {
+		return nil, err
+	}
+
+	// Find tx to be transferred
+	var txToBoTransferred wtxmgr.Credit
+	// Open a database read transaction and executes the function f
+	// Used to find transaction with hash 'txHash'
+	err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
+		// Get current block's height and hash.
+		bs, err := chainClient.BlockStamp()
+		if err != nil {
+			return err
+		}
+
+		// Find only the transaction with hash 'txHash' that belong to 'account'
+		// If not found any, or the found one isn't eligible, throw a relevant exception
+		// Eligible if : has 'minconf' confirmation & unspent
+		// Eventually will return only post-dated cheques
+		txToBoTransferred, err = w.findTheTransaction(dbtx, txHash, account, minconf, bs)
+		return err
+	})
+
+	amount := txToBoTransferred.Amount
+	// Make outputs for tx to be transferred
+	redeemOutput, err := makeOutput(address, amount, w.ChainParams())
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure the outputs to be created adhere to the network's consensus
+	// rules.
+	if err := txrules.CheckOutput(redeemOutput, feeSatPerKb); err != nil {
 		return nil, err
 	}
 
@@ -35,19 +69,59 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 			return err
 		}
 
-		txToBoTransferred, err := w.findTheTransaction(dbtx, txHash, account, minconf, bs)
+		eligible, err := w.findEligibleOutputs(dbtx, account, minconf, bs)
 		if err != nil {
 			return err
 		}
+		inputSource := makeInputSource(eligible)
 
-		// Make outputs for tx to be transferred
-		amount := txToBoTransferred.Amount
-		_ = amount
+		changeSource := func() ([]byte, error) {
+			// Derive the change output script.  As a hack to allow
+			// spending from the imported account, change addresses
+			// are created from account 0.
+			var changeAddr btcutil.Address
+			var err error
+			if account == waddrmgr.ImportedAddrAccount {
+				changeAddr, err = w.newChangeAddress(addrmgrNs, 0)
+			} else {
+				changeAddr, err = w.newChangeAddress(addrmgrNs, account)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return txscript.PayToAddrScript(changeAddr)
+		}
+
+		outputs := []*wire.TxOut{redeemOutput}
+		tx, err = txauthor.NewUnsignedTransactionFromInput(txToBoTransferred, outputs, feeSatPerKb,
+			inputSource, changeSource)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	})
 
 	return nil, nil
+}
+
+// makeOutput creates a transaction output from a pair of address
+// strings to amounts.  This is used to create the outputs to include in newly
+// created transactions from a JSON object describing the output destinations
+// and amounts.
+func makeOutput(addrStr string, amt btcutil.Amount, chainParams *chaincfg.Params) (*wire.TxOut, error) {
+	addr, err := btcutil.DecodeAddress(addrStr, chainParams)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode address: %s", err)
+	}
+
+	pkScript, err := txscript.PayToAddrScript(addr)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create txout script: %s", err)
+	}
+
+	output := wire.NewTxOut(int64(amt), pkScript)
+	return output, nil
 }
 
 // findTransaction is modified from 'findEligibleOutputs' in 'createtx.go'
