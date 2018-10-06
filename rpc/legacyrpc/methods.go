@@ -1497,16 +1497,22 @@ func transferTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error
 	cmd := icmd.(*btcjson.TransferTransactionCmd)
 
 	address := cmd.Address
-	txId := cmd.TxId
+	txHash, err := chainhash.NewHashFromStr(cmd.TxId)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDecodeHexString,
+			Message: "Transaction hash string decode failed: " + err.Error(),
+		}
+	}
 
-	return transferToAddress(w, address, txId,
+	return transferToAddress(w, address, *txHash,
 		waddrmgr.DefaultAccountNum, 1, txrules.DefaultRelayFeePerKb)
 }
 
-func transferToAddress(w *wallet.Wallet, addrStr string, txId string,
+func transferToAddress(w *wallet.Wallet, addrStr string, txHash chainhash.Hash,
 	account uint32, minconf int32, feeSatPerKb btcutil.Amount) (string, error) {
 
-	_, err := w.TransferTx(addrStr, txId, account, minconf, feeSatPerKb) //txHash
+	_, err := w.TransferTx(addrStr, txHash, account, minconf, feeSatPerKb) //txHash
 	if err != nil {
 		// TODO : check for tx is not found error
 		// TODO : check for tx is not mature error

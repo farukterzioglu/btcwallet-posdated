@@ -1129,7 +1129,7 @@ type (
 	createTxTransferRequest struct {
 		account     uint32
 		address     string
-		txId        string
+		txHash      chainhash.Hash
 		minconf     int32
 		feeSatPerKB btcutil.Amount
 		resp        chan createTxTransferResponse
@@ -1152,7 +1152,7 @@ out:
 				txr.resp <- createTxTransferResponse{nil, err}
 				continue
 			}
-			tx, err := w.txTransferToOutputs(txr.address, txr.txId, txr.account,
+			tx, err := w.txTransferToOutputs(txr.address, txr.txHash, txr.account,
 				txr.minconf, txr.feeSatPerKB)
 			heldUnlock.release()
 			txr.resp <- createTxTransferResponse{tx, err}
@@ -1164,11 +1164,11 @@ out:
 }
 
 // TODO : Write summary
-func (w *Wallet) CreateSimpleTxTransfer(account uint32, address string, txId string, minconf int32, feeSatPerKb btcutil.Amount) (*txauthor.AuthoredTx, error) {
+func (w *Wallet) CreateSimpleTxTransfer(account uint32, address string, txHash chainhash.Hash, minconf int32, feeSatPerKb btcutil.Amount) (*txauthor.AuthoredTx, error) {
 	req := createTxTransferRequest{
 		account:     account,
 		address:     address,
-		txId:        txId,
+		txHash:      txHash,
 		minconf:     minconf,
 		feeSatPerKB: feeSatPerKb,
 		resp:        make(chan createTxTransferResponse),
@@ -1179,8 +1179,8 @@ func (w *Wallet) CreateSimpleTxTransfer(account uint32, address string, txId str
 }
 
 // TODO : Write summary
-func (w *Wallet) TransferTx(address string, txId string, account uint32, minconf int32, feeSatPerKb btcutil.Amount) (*chainhash.Hash, error) {
-	_, err := w.CreateSimpleTxTransfer(account, address, txId, minconf, feeSatPerKb)
+func (w *Wallet) TransferTx(address string, txHash chainhash.Hash, account uint32, minconf int32, feeSatPerKb btcutil.Amount) (*chainhash.Hash, error) {
+	_, err := w.CreateSimpleTxTransfer(account, address, txHash, minconf, feeSatPerKb)
 	if err != nil {
 		return nil, err
 	}
