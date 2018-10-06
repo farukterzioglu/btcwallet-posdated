@@ -101,7 +101,7 @@ var rpcHandlers = map[string]struct {
 	"lockunspent":            {handler: lockUnspent},
 	"sendfrom":               {handlerWithChain: sendFrom},
 	"sendmany":               {handler: sendMany},
-	"transferTransaction":    {handler: transferTransaction},
+	"transfertransaction":    {handler: transferTransaction},
 	"sendtoaddress":          {handler: sendToAddress},
 	"settxfee":               {handler: setTxFee},
 	"signmessage":            {handler: signMessage},
@@ -1495,15 +1495,24 @@ func sendMany(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 
 func transferTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	cmd := icmd.(*btcjson.TransferTransactionCmd)
-	return transferToAddress(w,
-		cmd.Address, cmd.TxId,
+
+	address := cmd.Address
+	txHash, err := chainhash.NewHashFromStr(cmd.TxId)
+	if err != nil {
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCDecodeHexString,
+			Message: "Transaction hash string decode failed: " + err.Error(),
+		}
+	}
+
+	return transferToAddress(w, address, *txHash,
 		waddrmgr.DefaultAccountNum, 1, txrules.DefaultRelayFeePerKb)
 }
 
-func transferToAddress(w *wallet.Wallet, addrStr string, txId string,
+func transferToAddress(w *wallet.Wallet, addrStr string, txHash chainhash.Hash,
 	account uint32, minconf int32, feeSatPerKb btcutil.Amount) (string, error) {
 
-	txHash, err := w.TransferTx(addrStr, txId, account, minconf, feeSatPerKb)
+	_, err := w.TransferTx(addrStr, txHash, account, minconf, feeSatPerKb) //txHash
 	if err != nil {
 		// TODO : check for tx is not found error
 		// TODO : check for tx is not mature error
@@ -1523,7 +1532,7 @@ func transferToAddress(w *wallet.Wallet, addrStr string, txId string,
 		}
 	}
 
-	txHashStr := txHash.String()
+	txHashStr := "0000-0000-0000-0001" //txHash.String()
 	log.Infof("Successfully transferred transaction %v", txHashStr)
 	return txHashStr, nil
 }

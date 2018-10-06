@@ -7,6 +7,7 @@ package txauthor
 
 import (
 	"errors"
+	"github.com/btcsuite/btcwallet/wtxmgr"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
@@ -89,6 +90,88 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
 		if err != nil {
 			return nil, err
 		}
+		if inputAmount < targetAmount+targetFee {
+			return nil, insufficientFundsError{}
+		}
+
+		// We count the types of inputs, which we'll use to estimate
+		// the vsize of the transaction.
+		var nested, p2wpkh, p2pkh int
+		for _, pkScript := range scripts {
+			switch {
+			// If this is a p2sh output, we assume this is a
+			// nested P2WKH.
+			case txscript.IsPayToScriptHash(pkScript):
+				nested++
+			case txscript.IsPayToWitnessPubKeyHash(pkScript):
+				p2wpkh++
+			default:
+				p2pkh++
+			}
+		}
+
+		maxSignedSize := txsizes.EstimateVirtualSize(p2pkh, p2wpkh,
+			nested, outputs, true)
+		maxRequiredFee := txrules.FeeForSerializeSize(relayFeePerKb, maxSignedSize)
+		remainingAmount := inputAmount - targetAmount
+		if remainingAmount < maxRequiredFee {
+			targetFee = maxRequiredFee
+			continue
+		}
+
+		unsignedTransaction := &wire.MsgTx{
+			Version:  wire.TxVersion,
+			TxIn:     inputs,
+			TxOut:    outputs,
+			LockTime: 0,
+		}
+		changeIndex := -1
+		changeAmount := inputAmount - targetAmount - maxRequiredFee
+		if changeAmount != 0 && !txrules.IsDustAmount(changeAmount,
+			txsizes.P2WPKHPkScriptSize, relayFeePerKb) {
+			changeScript, err := fetchChange()
+			if err != nil {
+				return nil, err
+			}
+			if len(changeScript) > txsizes.P2WPKHPkScriptSize {
+				return nil, errors.New("fee estimation requires change " +
+					"scripts no larger than P2WPKH output scripts")
+			}
+			change := wire.NewTxOut(int64(changeAmount), changeScript)
+			l := len(outputs)
+			unsignedTransaction.TxOut = append(outputs[:l:l], change)
+			changeIndex = l
+		}
+
+		return &AuthoredTx{
+			Tx:              unsignedTransaction,
+			PrevScripts:     scripts,
+			PrevInputValues: inputValues,
+			TotalInput:      inputAmount,
+			ChangeIndex:     changeIndex,
+		}, nil
+	}
+}
+
+// TODO : Summary
+// TODO : Unit test
+// NewUnsignedTransactionFromInput ...
+// Uses credit as a first input and finds another one for the fee
+func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
+	fetchInputs InputSource, fetchChange ChangeSource) (*AuthoredTx, error) {
+
+	targetAmount := h.SumOutputValues(outputs)
+	estimatedSize := txsizes.EstimateVirtualSize(0, 1, 0, outputs, true)
+	targetFee := txrules.FeeForSerializeSize(relayFeePerKb, estimatedSize)
+
+	for {
+		// Fetch input only for fee
+		feeInputAmount, inputs, inputValues, scripts, err := fetchInputs(targetFee)
+		if err != nil {
+			return nil, err
+		}
+
+		inputAmount := feeInputAmount + credit.Amount
 		if inputAmount < targetAmount+targetFee {
 			return nil, insufficientFundsError{}
 		}

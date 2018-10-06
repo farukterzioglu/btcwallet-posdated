@@ -52,6 +52,7 @@ var Methods = []struct {
 	{"sendfrom", returnsString},
 	{"sendmany", returnsString},
 	{"sendtoaddress", returnsString},
+	{"transfertransaction", returnsString},
 	{"settxfee", returnsBool},
 	{"signmessage", returnsString},
 	{"signrawtransaction", []interface{}{(*btcjson.SignRawTransactionResult)(nil)}},
