@@ -155,6 +155,9 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
 
 // TODO : Summary
 // TODO : Unit test
+// TODO : Test zero fee scenario. It should be
+// one input, one output transaction if there is no fee
+//
 // NewUnsignedTransactionFromInput ...
 // Uses credit as a first input and finds another one for the fee
 func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
@@ -176,6 +179,10 @@ func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut
 			return nil, insufficientFundsError{}
 		}
 
+		// Add script of redeem credit manually
+		// because fetchInputs returns input only for fee
+		scripts = append(scripts, credit.PkScript)
+
 		// We count the types of inputs, which we'll use to estimate
 		// the vsize of the transaction.
 		var nested, p2wpkh, p2pkh int
@@ -192,6 +199,7 @@ func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut
 			}
 		}
 
+		// TODO : Test and manupilate codes below
 		maxSignedSize := txsizes.EstimateVirtualSize(p2pkh, p2wpkh,
 			nested, outputs, true)
 		maxRequiredFee := txrules.FeeForSerializeSize(relayFeePerKb, maxSignedSize)

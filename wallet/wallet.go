@@ -1180,17 +1180,12 @@ func (w *Wallet) CreateSimpleTxTransfer(account uint32, address string, txHash c
 
 // TODO : Write summary
 func (w *Wallet) TransferTx(address string, txHash chainhash.Hash, account uint32, minconf int32, feeSatPerKb btcutil.Amount) (*chainhash.Hash, error) {
-	_, err := w.CreateSimpleTxTransfer(account, address, txHash, minconf, feeSatPerKb)
+	createdTx, err := w.CreateSimpleTxTransfer(account, address, txHash, minconf, feeSatPerKb)
 	if err != nil {
 		return nil, err
 	}
-	// TODO : Use below code block inside CreateSimpleTxTransfer
-	/* for _, output := range outputs {
-		if err := txrules.CheckOutput(output, satPerKb); err != nil {
-			return nil, err
-		}
-	} */
-	return nil, nil
+
+	return w.publishTransaction(createdTx.Tx)
 }
 
 // CreateSimpleTx creates a new signed transaction spending unspent P2PKH
