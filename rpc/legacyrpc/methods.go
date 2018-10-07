@@ -1512,7 +1512,7 @@ func transferTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error
 func transferToAddress(w *wallet.Wallet, addrStr string, txHash chainhash.Hash,
 	account uint32, minconf int32, feeSatPerKb btcutil.Amount) (string, error) {
 
-	_, err := w.TransferTx(addrStr, txHash, account, minconf, feeSatPerKb) //txHash
+	redeemTxHash, err := w.TransferTx(addrStr, txHash, account, minconf, feeSatPerKb) //txHash
 	if err != nil {
 		// TODO : check for tx is not found error
 		// TODO : check for tx is not mature error
@@ -1532,7 +1532,7 @@ func transferToAddress(w *wallet.Wallet, addrStr string, txHash chainhash.Hash,
 		}
 	}
 
-	txHashStr := "0000-0000-0000-0001" //txHash.String()
+	txHashStr := redeemTxHash.String()
 	log.Infof("Successfully transferred transaction %v", txHashStr)
 	return txHashStr, nil
 }
