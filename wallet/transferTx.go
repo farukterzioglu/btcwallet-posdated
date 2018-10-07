@@ -27,7 +27,7 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 	}
 
 	// Find tx to be transferred
-	var txToBoTransferred wtxmgr.Credit
+	var txToBoTransferred *wtxmgr.Credit
 	// Open a database read transaction and executes the function f
 	// Used to find transaction with hash 'txHash'
 	err = walletdb.View(w.db, func(dbtx walletdb.ReadTx) error {
@@ -44,6 +44,9 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 		txToBoTransferred, err = w.findTheTransaction(dbtx, txHash, account, minconf, bs)
 		return err
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	amount := txToBoTransferred.Amount
 	// Make outputs for tx to be transferred
@@ -74,7 +77,6 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 			return err
 		}
 		inputSource := makeInputSource(eligible)
-
 		changeSource := func() ([]byte, error) {
 			// Derive the change output script.  As a hack to allow
 			// spending from the imported account, change addresses
@@ -99,10 +101,31 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 			return err
 		}
 
-		return nil
-	})
+		// Randomize change position, if change exists, before signing.
+		// This doesn't affect the serialize size, so the change amount
+		// will still be valid.
+		if tx.ChangeIndex >= 0 {
+			tx.RandomizeChangePosition()
+		}
 
-	return nil, nil
+		return tx.AddAllInputScripts(secretSource{w.Manager, addrmgrNs})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = validateMsgTx(tx.Tx, tx.PrevScripts, tx.PrevInputValues)
+	if err != nil {
+		return nil, err
+	}
+
+	if tx.ChangeIndex >= 0 && account == waddrmgr.ImportedAddrAccount {
+		changeAmount := btcutil.Amount(tx.Tx.TxOut[tx.ChangeIndex].Value)
+		log.Warnf("Spend from imported account produced change: moving"+
+			" %v from imported account into default account.", changeAmount)
+	}
+
+	return tx, nil
 }
 
 // makeOutput creates a transaction output from a pair of address
@@ -126,7 +149,7 @@ func makeOutput(addrStr string, amt btcutil.Amount, chainParams *chaincfg.Params
 
 // findTransaction is modified from 'findEligibleOutputs' in 'createtx.go'
 func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
-	account uint32, minconf int32, bs *waddrmgr.BlockStamp) (wtxmgr.Credit, error) {
+	account uint32, minconf int32, bs *waddrmgr.BlockStamp) (*wtxmgr.Credit, error) {
 
 	addrmgrNs := dbtx.ReadBucket(waddrmgrNamespaceKey)
 	txmgrNs := dbtx.ReadBucket(wtxmgrNamespaceKey)
@@ -134,7 +157,7 @@ func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
 	// TODO : Eventually get from post-dated transactions (POST-DATED feature)
 	unspent, err := w.TxStore.UnspentOutputs(txmgrNs)
 	if err != nil {
-		return wtxmgr.Credit{}, err
+		return nil, err
 	}
 
 	// TODO: Eventually all of these filters (except perhaps output locking)
@@ -142,11 +165,10 @@ func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
 	// Because one of these filters requires matching the output script to
 	// the desired account, this change depends on making wtxmgr a waddrmgr
 	// dependancy and requesting unspent outputs for a single account.
-	var eligible wtxmgr.Credit
+	var eligible *wtxmgr.Credit
 	for i := range unspent {
 		output := &unspent[i]
 
-		// TODO :  Check this
 		// For post-dated cheques, we want to transfer only tx with txHash
 		if output.Hash != txHash {
 			continue
@@ -156,21 +178,18 @@ func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
 		// confirmations.  Coinbase transactions must have have reached
 		// maturity before their outputs may be spent.
 		if !confirmed(minconf, output.Height, bs.Height) {
-			// TODO : return a custom 'not mature' error
-			continue
+			return nil, txNotMatureError{}
 		}
 		if output.FromCoinBase {
 			target := int32(w.chainParams.CoinbaseMaturity)
 			if !confirmed(target, output.Height, bs.Height) {
-				// TODO : return a custom 'not mature coinbase' error
-				continue
+				return nil, txCoinbaseNotMatureError{}
 			}
 		}
 
 		// Locked unspent outputs are skipped.
 		if w.LockedOutpoint(output.OutPoint) {
-			// TODO : return a custom 'locked tx' error
-			continue
+			return nil, txIsLockedError{}
 		}
 
 		// Only include the output if it is associated with the passed
@@ -185,10 +204,14 @@ func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
 		}
 		_, addrAcct, err := w.Manager.AddrAccount(addrmgrNs, addrs[0])
 		if err != nil || addrAcct != account {
-			// TODO : return a custom 'not an owned tx' error
-			continue
+			return nil, txIsNotOwnedError{}
 		}
-		eligible = *output
+		eligible = output
 	}
+
+	if eligible == nil {
+		return nil, txNotFoundError{}
+	}
+
 	return eligible, nil
 }

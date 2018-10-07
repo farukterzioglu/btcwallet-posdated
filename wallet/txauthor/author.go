@@ -160,7 +160,7 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
 //
 // NewUnsignedTransactionFromInput ...
 // Uses credit as a first input and finds another one for the fee
-func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
+func NewUnsignedTransactionFromInput(credit *wtxmgr.Credit, outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
 	fetchInputs InputSource, fetchChange ChangeSource) (*AuthoredTx, error) {
 
 	targetAmount := h.SumOutputValues(outputs)
@@ -209,6 +209,7 @@ func NewUnsignedTransactionFromInput(credit wtxmgr.Credit, outputs []*wire.TxOut
 			continue
 		}
 
+		// TODO : Should version change for post-dated cheqeues
 		unsignedTransaction := &wire.MsgTx{
 			Version:  wire.TxVersion,
 			TxIn:     inputs,
