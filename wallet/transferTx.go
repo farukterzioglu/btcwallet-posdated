@@ -19,7 +19,7 @@ import (
 // TODO : Write summary
 func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, account uint32,
 	minconf int32, feeSatPerKb btcutil.Amount) (tx *txauthor.AuthoredTx, err error) {
-	fmt.Printf("txTransferToOutputs")
+	log.Infof("Transaction transfer requested. Address : %s, Tx hash: %s, Account: %d", address, txHash, account)
 
 	chainClient, err := w.requireChainClient()
 	if err != nil {
@@ -94,8 +94,7 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 			return txscript.PayToAddrScript(changeAddr)
 		}
 
-		outputs := []*wire.TxOut{redeemOutput}
-		tx, err = txauthor.NewUnsignedTransactionFromInput(txToBoTransferred, outputs, feeSatPerKb,
+		tx, err = txauthor.NewUnsignedTransactionFromInput(txToBoTransferred, redeemOutput, feeSatPerKb,
 			inputSource, changeSource)
 		if err != nil {
 			return err
@@ -207,11 +206,9 @@ func (w *Wallet) findTheTransaction(dbtx walletdb.ReadTx, txHash chainhash.Hash,
 			return nil, txIsNotOwnedError{}
 		}
 		eligible = output
+
+		return eligible, nil
 	}
 
-	if eligible == nil {
-		return nil, txNotFoundError{}
-	}
-
-	return eligible, nil
+	return nil, txNotFoundError{}
 }

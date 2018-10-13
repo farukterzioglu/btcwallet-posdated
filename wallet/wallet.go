@@ -141,7 +141,7 @@ func (w *Wallet) Start() {
 	}
 	w.quitMu.Unlock()
 
-	w.wg.Add(2)
+	w.wg.Add(3)
 	go w.txCreator()
 	go w.txTransferCreator()
 	go w.walletLocker()

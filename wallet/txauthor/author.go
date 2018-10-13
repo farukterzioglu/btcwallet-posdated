@@ -160,28 +160,35 @@ func NewUnsignedTransaction(outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
 //
 // NewUnsignedTransactionFromInput ...
 // Uses credit as a first input and finds another one for the fee
-func NewUnsignedTransactionFromInput(credit *wtxmgr.Credit, outputs []*wire.TxOut, relayFeePerKb btcutil.Amount,
+func NewUnsignedTransactionFromInput(credit *wtxmgr.Credit, output *wire.TxOut, relayFeePerKb btcutil.Amount,
 	fetchInputs InputSource, fetchChange ChangeSource) (*AuthoredTx, error) {
 
-	targetAmount := h.SumOutputValues(outputs)
+	outputs := []*wire.TxOut{output}
+
+	// Create input from transaction to be transferred
+	nextInput := wire.NewTxIn(&credit.OutPoint, nil, nil)
+
+	targetAmount := credit.Amount
 	estimatedSize := txsizes.EstimateVirtualSize(0, 1, 0, outputs, true)
 	targetFee := txrules.FeeForSerializeSize(relayFeePerKb, estimatedSize)
 
 	for {
 		// Fetch input only for fee
-		feeInputAmount, inputs, inputValues, scripts, err := fetchInputs(targetFee)
+		feeInputAmount, feeInputs, feeInputValues, feeScripts, err := fetchInputs(targetFee)
 		if err != nil {
 			return nil, err
 		}
 
-		inputAmount := feeInputAmount + credit.Amount
-		if inputAmount < targetAmount+targetFee {
+		// Couldn't find eligible input for fee
+		if feeInputAmount < targetFee {
 			return nil, insufficientFundsError{}
 		}
 
-		// Add script of redeem credit manually
-		// because fetchInputs returns input only for fee
-		scripts = append(scripts, credit.PkScript)
+		// Calculate input values from fee & transaction to be transferred
+		inputAmount := feeInputAmount + credit.Amount
+		inputs := append(feeInputs, nextInput)
+		inputValues := append(feeInputValues, credit.Amount)
+		scripts := append(feeScripts, credit.PkScript)
 
 		// We count the types of inputs, which we'll use to estimate
 		// the vsize of the transaction.
@@ -199,7 +206,6 @@ func NewUnsignedTransactionFromInput(credit *wtxmgr.Credit, outputs []*wire.TxOu
 			}
 		}
 
-		// TODO : Test and manupilate codes below
 		maxSignedSize := txsizes.EstimateVirtualSize(p2pkh, p2wpkh,
 			nested, outputs, true)
 		maxRequiredFee := txrules.FeeForSerializeSize(relayFeePerKb, maxSignedSize)
