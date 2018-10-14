@@ -76,6 +76,15 @@ func (w *Wallet) txTransferToOutputs(address string, txHash chainhash.Hash, acco
 		if err != nil {
 			return err
 		}
+
+		// Remove transaction to be transferred from eligible inputs
+		// If we do not, it causes duplicate inputs error
+		for idx, item := range eligible {
+			if item.Hash == txHash {
+				eligible = append(eligible[:idx], eligible[idx+1:]...)
+			}
+		}
+
 		inputSource := makeInputSource(eligible)
 		changeSource := func() ([]byte, error) {
 			// Derive the change output script.  As a hack to allow
