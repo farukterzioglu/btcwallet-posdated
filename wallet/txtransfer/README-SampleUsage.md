@@ -148,4 +148,66 @@ btcctl -C .\btcctl.conf --wallet listunspent
     "spendable": true
   }
 ]
+
+btcctl -C .\btcctl.conf --wallet gettransaction d7ff90d4a3a07148446cc98cae786efe3e394e9660614fac262ab1354575f4c4
+(This tx includes transferred transaction and the change)
+-> 
+{
+  "amount": 50,
+  "fee": 0.00000373,
+  "confirmations": 1,
+  "blockhash": "47b7d70a2088854f80a39fa57f392715c2ad7abf8f04e2c7938f6fc683f618c8",
+  "blockindex": 0,
+  "blocktime": 1539549532,
+  "txid": "d7ff90d4a3a07148446cc98cae786efe3e394e9660614fac262ab1354575f4c4",
+  "walletconflicts": [],
+  "time": 1539549533,
+  "timereceived": 1539549533,
+  "details": [
+    {
+      "account": "",
+      "amount": -100,
+      "category": "send",
+      "fee": 0.00000373,
+      "vout": 0
+    },
+    {
+      "account": "account1",
+      "address": "SZMEzGtDCgxmm1WKjbSUqBie3xcU7ovuyG",
+      "amount": 50,
+      "category": "receive",
+      "vout": 1
+    }
+  ],
+  "hex": "01000000020e4c8ea118ba8256c67614b5c92cc4f9b25c0ebbd35f6569acbd9b2ad41b51e8000000006a4730440220101c9a344296bd8fb49e48878b0342ba578ab92c38269c72915d79b53763c0440220446b54721493bff502a39eba0b69b5faa4a349bc1f7a6ff7cbbaabb00f4c3f9d01210223ac6a75f94e60de9ad1642982170c958f7eba2d8640830b28fb67e1fe57561dffffffff5973758dfe39313f97c6929f357d2952b6e36aee9131d28d5517a276d0e614de000000006b483045022100856c05b2136a03362aa5f44892caabd90efac09780409deb19955c1bca36858d02205a7563e0f265ab55c4c75e5508fa2e987c8977873a30aa62788985cd5fccc05901210223ac6a75f94e60de9ad1642982170c958f7eba2d8640830b28fb67e1fe57561dffffffff028bf0052a010000001600145be92aa394af5b030d804b905ca9c974d441744400f2052a010000001976a914843e682e2cad833c2b4056a473423cf4458f38f388ac00000000"
+}
+
+btcctl -C .\btcctl.conf --wallet gettransaction 33c956a67f0d9423d376fc8fcb27426da727baf162b63e501ed8bb4ff4679aee
+(This is the reward of 10. block)
+-> 
+{
+  "amount": 50,
+  "confirmations": 100,
+  "blockhash": "5887b49fd44146eb24447ae3c8eeb93bb80c76f8b1e931e445ecc1066427cb59",
+  "blockindex": 0,
+  "blocktime": 1539433122,
+  "txid": "33c956a67f0d9423d376fc8fcb27426da727baf162b63e501ed8bb4ff4679aee",
+  "walletconflicts": [],
+  "time": 1539433120,
+  "timereceived": 1539433120,
+  "details": [
+    {
+      "account": "default",
+      "address": "SYYFCKLX38x6aZRsxuLmdNXSBDZ3BaJczq",
+      "amount": 50,
+      "category": "generate",
+      "vout": 0
+    }
+  ],
+  "hex": "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff165a08830f409bcb227e3c0b2f503253482f627463642fffffffff0100f2052a010000001976a9147b5b07b286ef494549db8630aeb37301bf99663c88ac00000000"
+}
+
+(Block height of 47b7d70a2088854f80a39fa57f392715c2ad7abf8f04e2c7938f6fc683f618c8 : 109)
+(Block height of 5887b49fd44146eb24447ae3c8eeb93bb80c76f8b1e931e445ecc1066427cb59 : 10)
+
 ```
