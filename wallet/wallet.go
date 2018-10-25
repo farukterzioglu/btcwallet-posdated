@@ -98,7 +98,8 @@ type Wallet struct {
 	createTxRequests chan createTxRequest
 
 	// Channel for transaction transfer requests
-	createTxTransferRequests chan createTxTransferRequest
+	createTxTransferRequests  chan createTxTransferRequest
+	createPostDatedTxRequests chan createPostDatedTxRequest
 
 	// Channels for the manager locker.
 	unlockRequests     chan unlockRequest
@@ -1122,70 +1123,6 @@ out:
 		}
 	}
 	w.wg.Done()
-}
-
-// TODO : Write summary
-type (
-	createTxTransferRequest struct {
-		account     uint32
-		address     string
-		txHash      chainhash.Hash
-		minconf     int32
-		feeSatPerKB btcutil.Amount
-		resp        chan createTxTransferResponse
-	}
-	createTxTransferResponse struct {
-		tx  *txauthor.AuthoredTx
-		err error
-	}
-)
-
-// TODO : Write summary
-func (w *Wallet) txTransferCreator() {
-	quit := w.quitChan()
-out:
-	for {
-		select {
-		case txr := <-w.createTxTransferRequests:
-			heldUnlock, err := w.holdUnlock()
-			if err != nil {
-				txr.resp <- createTxTransferResponse{nil, err}
-				continue
-			}
-			tx, err := w.txTransferToOutputs(txr.address, txr.txHash, txr.account,
-				txr.minconf, txr.feeSatPerKB)
-			heldUnlock.release()
-			txr.resp <- createTxTransferResponse{tx, err}
-		case <-quit:
-			break out
-		}
-	}
-	w.wg.Done()
-}
-
-// TODO : Write summary
-func (w *Wallet) CreateSimpleTxTransfer(account uint32, address string, txHash chainhash.Hash, minconf int32, feeSatPerKb btcutil.Amount) (*txauthor.AuthoredTx, error) {
-	req := createTxTransferRequest{
-		account:     account,
-		address:     address,
-		txHash:      txHash,
-		minconf:     minconf,
-		feeSatPerKB: feeSatPerKb,
-		resp:        make(chan createTxTransferResponse),
-	}
-	w.createTxTransferRequests <- req
-	resp := <-req.resp
-	return resp.tx, resp.err
-}
-
-// TODO : Write summary
-func (w *Wallet) TransferTx(address string, txHash chainhash.Hash, account uint32, minconf int32, feeSatPerKb btcutil.Amount) (*chainhash.Hash, error) {
-	createdTx, err := w.CreateSimpleTxTransfer(account, address, txHash, minconf, feeSatPerKb)
-	if err != nil {
-		return nil, err
-	}
-
-	return w.publishTransaction(createdTx.Tx)
 }
 
 // CreateSimpleTx creates a new signed transaction spending unspent P2PKH
