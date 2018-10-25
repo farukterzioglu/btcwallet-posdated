@@ -98,7 +98,8 @@ type Wallet struct {
 	createTxRequests chan createTxRequest
 
 	// Channel for transaction transfer requests
-	createTxTransferRequests chan createTxTransferRequest
+	createTxTransferRequests  chan createTxTransferRequest
+	createPostDatedTxRequests chan createPostDatedTxRequest
 
 	// Channels for the manager locker.
 	unlockRequests     chan unlockRequest

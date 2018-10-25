@@ -16,10 +16,6 @@ import (
 	"github.com/btcsuite/btcwallet/wtxmgr"
 )
 
-func (w *Wallet) NewUnsignedTransactionFromCoincase(coincase *btcutil.Tx) {
-
-}
-
 // TODO : Write summary
 type (
 	createTxTransferRequest struct {
