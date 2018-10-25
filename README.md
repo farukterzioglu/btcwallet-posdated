@@ -1,5 +1,5 @@
 Check use case for transferring a transaction as a whole  
-[Transaction transfer use case](/wallet/README-TransactionTransfer.md)  
+[Transaction transfer use case](/wallet/txtransfer/README-SampleUsage.md)  
 
 btcwallet
 =========
