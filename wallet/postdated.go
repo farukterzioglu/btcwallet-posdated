@@ -33,7 +33,7 @@ type (
 		resp        chan createPostDatedTxResponse
 	}
 	createPostDatedTxResponse struct {
-		tx  *txauthor.AuthoredTx
+		tx  *AuthoredPostDatedTx
 		err error
 	}
 )
@@ -99,12 +99,10 @@ func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxO
 
 	// Get amount from coincase
 	amount := btcutil.Amount(coincaseTx.MsgTx().TxOut[0].Value)
-	currentInputValues := make([]btcutil.Amount, 0, 1)
-	currentInputValues = append(currentInputValues, amount)
+	currentInputValues := []btcutil.Amount{amount}
 
 	// Get pkScript from coincase
-	currentScripts := make([][]byte, 0, 1)
-	currentScripts = append(currentScripts, coincaseTx.MsgTx().TxOut[0].PkScript)
+	currentScripts := [][]byte{coincaseTx.MsgTx().TxOut[0].PkScript}
 
 	return &AuthoredPostDatedTx{
 		Tx:              unsignedTransaction,
@@ -134,14 +132,18 @@ func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDated
 		return createPostDatedTxResponse{nil, err}
 	}
 
-	NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput)
-
-	// TODO : Continue to implementation
-
+	var tx *AuthoredPostDatedTx
+	tx, err = NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput)
 	if err != nil {
 		return createPostDatedTxResponse{nil, err}
 	}
 
+	// TODO : Check createtx.go:156
+	// tx.AddAllInputScripts(secretSource{w.Manager, addrmgrNs})
+
+	// TODO : validate mgsTx
+
+	// TODO : Sign the tx
 	// TODO : Continue to implementation
 	return createPostDatedTxResponse{nil, nil}
 }
