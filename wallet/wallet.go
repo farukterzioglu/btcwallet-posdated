@@ -98,7 +98,9 @@ type Wallet struct {
 	createTxRequests chan createTxRequest
 
 	// Channel for transaction transfer requests
-	createTxTransferRequests  chan createTxTransferRequest
+	createTxTransferRequests chan createTxTransferRequest
+
+	// Channel for postdated transactions
 	createPostDatedTxRequests chan createPostDatedTxRequest
 
 	// Channels for the manager locker.
@@ -142,10 +144,11 @@ func (w *Wallet) Start() {
 	}
 	w.quitMu.Unlock()
 
-	w.wg.Add(3)
+	w.wg.Add(4)
 	go w.txCreator()
 	go w.txTransferCreator()
 	go w.walletLocker()
+	go w.postDatedTxCreator()
 }
 
 // SynchronizeRPC associates the wallet with the consensus RPC client,
@@ -3438,27 +3441,28 @@ func Open(db walletdb.DB, pubPass []byte, cbs *waddrmgr.OpenCallbacks,
 
 	log.Infof("Opened wallet") // TODO: log balance? last sync height?
 	w := &Wallet{
-		publicPassphrase:         pubPass,
-		db:                       db,
-		Manager:                  addrMgr,
-		TxStore:                  txMgr,
-		lockedOutpoints:          map[wire.OutPoint]struct{}{},
-		recoveryWindow:           recoveryWindow,
-		rescanAddJob:             make(chan *RescanJob),
-		rescanBatch:              make(chan *rescanBatch),
-		rescanNotifications:      make(chan interface{}),
-		rescanProgress:           make(chan *RescanProgressMsg),
-		rescanFinished:           make(chan *RescanFinishedMsg),
-		createTxRequests:         make(chan createTxRequest),
-		createTxTransferRequests: make(chan createTxTransferRequest),
-		unlockRequests:           make(chan unlockRequest),
-		lockRequests:             make(chan struct{}),
-		holdUnlockRequests:       make(chan chan heldUnlock),
-		lockState:                make(chan bool),
-		changePassphrase:         make(chan changePassphraseRequest),
-		changePassphrases:        make(chan changePassphrasesRequest),
-		chainParams:              params,
-		quit:                     make(chan struct{}),
+		publicPassphrase:          pubPass,
+		db:                        db,
+		Manager:                   addrMgr,
+		TxStore:                   txMgr,
+		lockedOutpoints:           map[wire.OutPoint]struct{}{},
+		recoveryWindow:            recoveryWindow,
+		rescanAddJob:              make(chan *RescanJob),
+		rescanBatch:               make(chan *rescanBatch),
+		rescanNotifications:       make(chan interface{}),
+		rescanProgress:            make(chan *RescanProgressMsg),
+		rescanFinished:            make(chan *RescanFinishedMsg),
+		createTxRequests:          make(chan createTxRequest),
+		createTxTransferRequests:  make(chan createTxTransferRequest),
+		createPostDatedTxRequests: make(chan createPostDatedTxRequest),
+		unlockRequests:            make(chan unlockRequest),
+		lockRequests:              make(chan struct{}),
+		holdUnlockRequests:        make(chan chan heldUnlock),
+		lockState:                 make(chan bool),
+		changePassphrase:          make(chan changePassphraseRequest),
+		changePassphrases:         make(chan changePassphrasesRequest),
+		chainParams:               params,
+		quit:                      make(chan struct{}),
 	}
 	w.NtfnServer = newNotificationServer(w)
 	w.TxStore.NotifyUnspent = func(hash *chainhash.Hash, index uint32) {

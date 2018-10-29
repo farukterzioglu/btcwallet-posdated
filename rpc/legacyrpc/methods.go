@@ -101,6 +101,7 @@ var rpcHandlers = map[string]struct {
 	"lockunspent":            {handler: lockUnspent},
 	"sendfrom":               {handlerWithChain: sendFrom},
 	"sendmany":               {handler: sendMany},
+	"sendPostDatedTx":        {handler: sendPostDatedTx},
 	"transfertransaction":    {handler: transferTransaction},
 	"sendtoaddress":          {handler: sendToAddress},
 	"settxfee":               {handler: setTxFee},
@@ -1493,6 +1494,19 @@ func sendMany(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	return sendPairs(w, pairs, account, minConf, txrules.DefaultRelayFeePerKb)
 }
 
+// TODO : write summary
+func sendPostDatedTx(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
+	cmd := icmd.(*btcjson.SendPostDatedTxCmd)
+
+	redeemTxHash, _ := w.SendPostDated(cmd.Address, cmd.Amount, cmd.LockTime, waddrmgr.DefaultAccountNum) //txHash
+	// TODO : Check for error
+
+	txHashStr := redeemTxHash.String()
+	log.Infof("Successfully transferred transaction %v", txHashStr)
+	return txHashStr, nil
+}
+
+// TODO : write summary
 func transferTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	cmd := icmd.(*btcjson.TransferTransactionCmd)
 
