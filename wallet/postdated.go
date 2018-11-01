@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btcwallet/waddrmgr"
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
+	"github.com/btcsuite/btcwallet/walletdb"
 )
 
 // wallet/wallet.go
@@ -33,7 +34,7 @@ type (
 		resp        chan createPostDatedTxResponse
 	}
 	createPostDatedTxResponse struct {
-		tx  *AuthoredPostDatedTx
+		tx  *txauthor.AuthoredTx
 		err error
 	}
 )
@@ -78,13 +79,7 @@ out:
 	w.wg.Done()
 }
 
-type AuthoredPostDatedTx struct {
-	Tx              *wire.MsgTx
-	PrevScripts     [][]byte
-	PrevInputValues []btcutil.Amount
-}
-
-func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxOut) (*AuthoredPostDatedTx, error) {
+func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxOut) (*txauthor.AuthoredTx, error) {
 	// Create unsigned tx
 	unsignedTransaction := &wire.MsgTx{
 		Version: PostDatedTxVersion,
@@ -104,10 +99,12 @@ func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxO
 	// Get pkScript from coincase
 	currentScripts := [][]byte{coincaseTx.MsgTx().TxOut[0].PkScript}
 
-	return &AuthoredPostDatedTx{
+	return &txauthor.AuthoredTx{
 		Tx:              unsignedTransaction,
 		PrevScripts:     currentScripts,
 		PrevInputValues: currentInputValues,
+		TotalInput:      1,
+		ChangeIndex:     -1,
 	}, nil
 }
 
@@ -132,18 +129,25 @@ func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDated
 		return createPostDatedTxResponse{nil, err}
 	}
 
-	var tx *AuthoredPostDatedTx
-	tx, err = NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput)
+	var tx *txauthor.AuthoredTx
+	err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
+		addrmgrNs := dbtx.ReadWriteBucket(waddrmgrNamespaceKey)
+
+		tx, err = NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput)
+		if err != nil {
+			return err
+		}
+
+		return tx.AddAllInputScripts(secretSource{w.Manager, addrmgrNs})
+	})
 	if err != nil {
 		return createPostDatedTxResponse{nil, err}
 	}
 
-	// TODO : Check createtx.go:156
-	// tx.AddAllInputScripts(secretSource{w.Manager, addrmgrNs})
+	err = validateMsgTx(tx.Tx, tx.PrevScripts, tx.PrevInputValues)
+	if err != nil {
+		return createPostDatedTxResponse{nil, err}
+	}
 
-	// TODO : validate mgsTx
-
-	// TODO : Sign the tx
-	// TODO : Continue to implementation
-	return createPostDatedTxResponse{nil, nil}
+	return createPostDatedTxResponse{tx, nil}
 }
