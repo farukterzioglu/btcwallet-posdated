@@ -101,7 +101,7 @@ var rpcHandlers = map[string]struct {
 	"lockunspent":            {handler: lockUnspent},
 	"sendfrom":               {handlerWithChain: sendFrom},
 	"sendmany":               {handler: sendMany},
-	"sendPostDatedTx":        {handler: sendPostDatedTx},
+	"sendpostdatedtx":        {handler: sendPostDatedTx},
 	"transfertransaction":    {handler: transferTransaction},
 	"sendtoaddress":          {handler: sendToAddress},
 	"settxfee":               {handler: setTxFee},
