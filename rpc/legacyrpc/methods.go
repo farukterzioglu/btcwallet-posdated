@@ -1498,8 +1498,23 @@ func sendMany(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 func sendPostDatedTx(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	cmd := icmd.(*btcjson.SendPostDatedTxCmd)
 
-	redeemTxHash, _ := w.SendPostDated(cmd.Address, cmd.Amount, cmd.LockTime, waddrmgr.DefaultAccountNum) //txHash
-	// TODO : Check for error
+	redeemTxHash, err := w.SendPostDated(cmd.Address, cmd.Amount, cmd.LockTime, waddrmgr.DefaultAccountNum) //txHash
+	if err != nil {
+		// TODO : Check for error types
+
+		if waddrmgr.IsError(err, waddrmgr.ErrLocked) {
+			return "", &ErrWalletUnlockNeeded
+		}
+		switch err.(type) {
+		case btcjson.RPCError:
+			return "", err
+		}
+
+		return "", &btcjson.RPCError{
+			Code:    btcjson.ErrRPCInternal.Code,
+			Message: err.Error(),
+		}
+	}
 
 	txHashStr := redeemTxHash.String()
 	log.Infof("Successfully transferred transaction %v", txHashStr)
