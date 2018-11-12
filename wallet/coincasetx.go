@@ -19,7 +19,7 @@ func createCoincaseScript() ([]byte, error) {
 }
 
 // Reference : btcsuite\btcd\mining\mining.go:253
-func newCoincaseTransaction(pkScript []byte, amount int64, lockTime uint32) (
+func newCoincaseTransaction(pkScript []byte, amount int64) (
 	*btcutil.Tx, error) {
 	var err error
 
@@ -43,17 +43,13 @@ func newCoincaseTransaction(pkScript []byte, amount int64, lockTime uint32) (
 		PkScript: pkScript,
 	})
 
-	tx.LockTime = lockTime
-
 	// Reference : btcsuite\btcd\mining\mining.go:805
 	// TODO : Check segwit related codes
 
 	return btcutil.NewTx(tx), nil
 }
 
-func (w *Wallet) createCoincase(
-	coincaseAddr btcutil.Address,
-	amount int64, lockTime uint32) (coincaseTx *btcutil.Tx, err error) {
+func (w *Wallet) createCoincase(coincaseAddr btcutil.Address, amount int64) (coincaseTx *btcutil.Tx, err error) {
 
 	// Create coincase
 	pkScript, err := txscript.PayToAddrScript(coincaseAddr)
@@ -61,6 +57,6 @@ func (w *Wallet) createCoincase(
 		return
 	}
 
-	coincaseTx, err = newCoincaseTransaction(pkScript, amount, lockTime)
+	coincaseTx, err = newCoincaseTransaction(pkScript, amount)
 	return
 }
