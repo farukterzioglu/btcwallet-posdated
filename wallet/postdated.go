@@ -130,10 +130,8 @@ func (w *Wallet) createSimplePostDatedTx(address string, amount int64, lockTime 
 		resp:     make(chan createPostDatedTxResponse),
 	}
 
-	// TODO : use channels instead of direct call
-	//w.createPostDatedTxRequests <- req
-	//resp := <-req.resp
-	resp := w.createPostDatedTx(req)
+	w.createPostDatedTxRequests <- req
+	resp := <-req.resp
 	return resp.tx, resp.err
 }
 
