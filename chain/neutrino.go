@@ -167,6 +167,13 @@ func (s *NeutrinoClient) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) 
 	return &hash, nil
 }
 
+// SendRawTransaction replicates the RPC client's SendRawTransaction command.
+func (s *NeutrinoClient) SendRawPostDatedTransaction(tx *wire.MsgPostDatedTx, allowHighFees bool) (
+	*chainhash.Hash, error) {
+	// TODO : Implement this
+	return nil, nil
+}
+
 // FilterBlocks scans the blocks contained in the FilterBlocksRequest for any
 // addresses of interest. For each requested block, the corresponding compact
 // filter will first be checked for matches, skipping those that do not report
