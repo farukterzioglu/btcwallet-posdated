@@ -10,93 +10,34 @@ import (
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	"github.com/btcsuite/btcwallet/wallet/txrules"
 	"github.com/btcsuite/btcwallet/walletdb"
-	"strings"
 )
 
 // TODO : move to wallet/wallet.go
-// TODO : Add description
-func (w *Wallet) publishPostDatedTransaction(tx *wire.MsgPostDatedTx) (*chainhash.Hash, error) {
-	server, err := w.requireChainClient()
-	if err != nil {
-		return nil, err
-	}
-
-	/* TODO : Implement adding post-dated tx (with coincase tx) to the local db
-	// As we aim for this to be general reliable transaction broadcast API,
-	// we'll write this tx to disk as an unconfirmed transaction. This way,
-	// upon restarts, we'll always rebroadcast it, and also add it to our
-	// set of records.
-	txRec, err := wtxmgr.NewTxRecordFromMsgTx(tx, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	err = walletdb.Update(w.db, func(dbTx walletdb.ReadWriteTx) error {
-		return w.addRelevantTx(dbTx, txRec, nil)
-	})
-	if err != nil {
-		return nil, err
-	}
-	*/
-
-	txid, err := server.SendRawPostDatedTransaction(tx, false)
-	switch {
-	case err == nil:
-		return txid, nil
-
-		// The following are errors returned from btcd's mempool.
-	case strings.Contains(err.Error(), "spent"):
-		fallthrough
-	case strings.Contains(err.Error(), "orphan"):
-		fallthrough
-	case strings.Contains(err.Error(), "conflict"):
-		fallthrough
-
-		// The following errors are returned from bitcoind's mempool.
-	case strings.Contains(err.Error(), "fee not met"):
-		fallthrough
-	case strings.Contains(err.Error(), "Missing inputs"):
-		fallthrough
-	case strings.Contains(err.Error(), "already in block chain"):
-		// If the transaction was rejected, then we'll remove it from
-		// the txstore, as otherwise, we'll attempt to continually
-		// re-broadcast it, and the utxo state of the wallet won't be
-		// accurate.
-
-		/* TODO : Implement removing from db
-		dbErr := walletdb.Update(w.db, func(dbTx walletdb.ReadWriteTx) error {
-			txmgrNs := dbTx.ReadWriteBucket(wtxmgrNamespaceKey)
-			return w.TxStore.RemoveUnminedTx(txmgrNs, txRec)
-		})
-		if dbErr != nil {
-			return nil, fmt.Errorf("unable to broadcast tx: %v, "+
-				"unable to remove invalid tx: %v", err, dbErr)
-		}
-		*/
-
-		return nil, err
-
-	default:
-		return nil, err
-	}
-}
-
-// TODO : move to wallet/wallet.go
 func (w *Wallet) SendPostDated(addrStr string, amount int64, lockTime uint32,
-	account uint32) (*chainhash.Hash, error) {
+	account uint32) ([]*chainhash.Hash, error) {
 	createdTx, err := w.createSimplePostDatedTx(addrStr, amount, lockTime, account)
 	if err != nil {
 		return nil, err
 	}
 
-	return w.publishPostDatedTransaction(createdTx.Tx)
+	coincaseHash, err := w.publishTransaction(createdTx.CoincaseTx)
+	if err != nil {
+		return nil, err
+	}
+
+	postDatedhash, err := w.publishTransaction(createdTx.PostDatedTx)
+	if err != nil {
+		return nil, err
+	}
+
+	return []*chainhash.Hash{coincaseHash, postDatedhash}, nil
 }
 
 type AuthoredPostDatedTx struct {
-	Tx              *wire.MsgPostDatedTx
-	PrevScripts     [][]byte
-	PrevInputValues []btcutil.Amount
-	TotalInput      btcutil.Amount
-	ChangeIndex     int // negative if no change
+	CoincaseTx  *wire.MsgTx
+	PostDatedTx *wire.MsgTx
+	// CoincaseTx *txauthor.AuthoredTx
+	// PostDatedTx *txauthor.AuthoredTx
 }
 
 // wallet/wallet.go
@@ -156,7 +97,7 @@ out:
 func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxOut) (*txauthor.AuthoredTx, error) {
 	// Create unsigned tx
 	unsignedTransaction := &wire.MsgTx{
-		Version:  PostDatedTxVersion,
+		Version:  wire.PostDatedTxVersion,
 		LockTime: 0,
 	}
 
@@ -225,21 +166,10 @@ func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDated
 		return createPostDatedTxResponse{nil, err}
 	}
 
-	msgPostDatedTx := wire.MsgPostDatedTx{
-		CoincaseMgsTx: coincaseTx.MsgTx(),
-		LockTime:      tx.Tx.LockTime,
-		Version:       tx.Tx.Version,
-		TxOut:         tx.Tx.TxOut,
-		TxIn:          tx.Tx.TxIn,
+	result := &AuthoredPostDatedTx{
+		CoincaseTx:  coincaseTx.MsgTx(),
+		PostDatedTx: tx.Tx,
 	}
 
-	postDatedTx := &AuthoredPostDatedTx{
-		Tx:              &msgPostDatedTx,
-		ChangeIndex:     tx.ChangeIndex,
-		TotalInput:      tx.TotalInput,
-		PrevInputValues: tx.PrevInputValues,
-		PrevScripts:     tx.PrevScripts,
-	}
-
-	return createPostDatedTxResponse{postDatedTx, nil}
+	return createPostDatedTxResponse{result, nil}
 }

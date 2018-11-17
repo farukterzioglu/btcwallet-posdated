@@ -1516,9 +1516,11 @@ func sendPostDatedTx(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 		}
 	}
 
-	txHashStr := redeemTxHash.String()
-	log.Infof("Successfully transferred transaction %v", txHashStr)
-	return txHashStr, nil
+	coincaseTxHashStr := redeemTxHash[0].String()
+	postDatedTxHashStr := redeemTxHash[0].String()
+	log.Infof("Successfully transferred post-dated transaction %v (coincase : %v)",
+		postDatedTxHashStr, coincaseTxHashStr)
+	return []string{coincaseTxHashStr, postDatedTxHashStr}, nil
 }
 
 // TODO : write summary

@@ -7,28 +7,17 @@ import (
 	"github.com/btcsuite/btcutil"
 )
 
-const (
-	coincaseTxFlags = "/POSTDATED/"
-
-	// TODO : Need to be in wire package
-	PostDatedTxVersion = 2
-)
-
-func createCoincaseScript() ([]byte, error) {
-	return txscript.NewScriptBuilder().AddData([]byte(coincaseTxFlags)).Script()
-}
-
 // Reference : btcsuite\btcd\mining\mining.go:253
 func newCoincaseTransaction(pkScript []byte, amount int64) (
 	*btcutil.Tx, error) {
 	var err error
 
-	postDatedScript, err := createCoincaseScript()
+	postDatedScript, err := txscript.CreateCoincaseScript()
 	if err != nil {
 		return nil, err
 	}
 
-	tx := wire.NewMsgTx(PostDatedTxVersion)
+	tx := wire.NewMsgTx(wire.PostDatedTxVersion)
 
 	tx.AddTxIn(&wire.TxIn{
 		// Coincase transactions have no inputs, so previous outpoint is

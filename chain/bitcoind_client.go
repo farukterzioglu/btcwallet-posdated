@@ -195,13 +195,6 @@ func (c *BitcoindClient) SendRawTransaction(tx *wire.MsgTx,
 	return c.chainConn.client.SendRawTransaction(tx, allowHighFees)
 }
 
-// SendRawTransaction sends a raw transaction via bitcoind.
-func (c *BitcoindClient) SendRawPostDatedTransaction(tx *wire.MsgPostDatedTx,
-	allowHighFees bool) (*chainhash.Hash, error) {
-
-	return c.chainConn.client.SendRawPostDatedTransaction(tx, allowHighFees)
-}
-
 // Notifications returns a channel to retrieve notifications from.
 //
 // NOTE: This is part of the chain.Interface interface.
