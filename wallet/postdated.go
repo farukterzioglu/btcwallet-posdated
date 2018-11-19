@@ -20,12 +20,12 @@ func (w *Wallet) SendPostDated(addrStr string, amount int64, lockTime uint32,
 		return nil, err
 	}
 
-	coincaseHash, err := w.publishTransaction(createdTx.CoincaseTx)
+	postDatedhash, err := w.publishTransaction(createdTx.PostDatedTx)
 	if err != nil {
 		return nil, err
 	}
 
-	postDatedhash, err := w.publishTransaction(createdTx.PostDatedTx)
+	coincaseHash, err := w.publishTransaction(createdTx.CoincaseTx)
 	if err != nil {
 		return nil, err
 	}
