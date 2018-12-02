@@ -3,7 +3,10 @@
 package wallet
 
 import (
+	"fmt"
+	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcwallet/waddrmgr"
@@ -36,8 +39,6 @@ func (w *Wallet) SendPostDated(addrStr string, amount int64, lockTime uint32,
 type AuthoredPostDatedTx struct {
 	CoincaseTx  *wire.MsgTx
 	PostDatedTx *wire.MsgTx
-	// CoincaseTx *txauthor.AuthoredTx
-	// PostDatedTx *txauthor.AuthoredTx
 }
 
 // wallet/wallet.go
@@ -123,6 +124,55 @@ func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxO
 	}, nil
 }
 
+// Reference : btcsuite\btcd\mining\mining.go:253
+func (w *Wallet) createCoincase(coincaseAddr btcutil.Address, amount int64, nextBlockHeight int32) (
+	*btcutil.Tx, error) {
+	// Create coincase
+	pkScript, err := txscript.PayToAddrScript(coincaseAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	extraNonce, err := wire.RandomUint64()
+	if err != nil {
+		log.Errorf("Unexpected error while generating random "+
+			"extra nonce offset: %v", err)
+		extraNonce = 0
+	}
+
+	postDatedScript, err := txscript.CreateCoincaseScript(nextBlockHeight, extraNonce)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(postDatedScript) > blockchain.MaxCoinbaseScriptLen {
+		return nil, fmt.Errorf("coinbase transaction script length "+
+			"of %d is out of range (min: %d, max: %d)",
+			len(postDatedScript), blockchain.MinCoinbaseScriptLen,
+			blockchain.MaxCoinbaseScriptLen)
+	}
+
+	tx := wire.NewMsgTx(wire.PostDatedTxVersion)
+
+	tx.AddTxIn(&wire.TxIn{
+		// Coincase transactions have no inputs, so previous outpoint is
+		// zero hash and max index.
+		PreviousOutPoint: *wire.NewOutPoint(&chainhash.Hash{},
+			wire.MaxPrevOutIndex),
+		SignatureScript: postDatedScript,
+		Sequence:        wire.MaxTxInSequenceNum,
+	})
+	tx.AddTxOut(&wire.TxOut{
+		Value:    amount,
+		PkScript: pkScript,
+	})
+
+	// Reference : btcsuite\btcd\mining\mining.go:805
+	// TODO : Check segwit related codes
+
+	return btcutil.NewTx(tx), nil
+}
+
 //
 func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDatedTxResponse {
 	amount := btcutil.Amount(req.amount)
@@ -135,11 +185,17 @@ func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDated
 		return createPostDatedTxResponse{nil, err}
 	}
 
+	// Get next block height
+	// reference : wallet.go:2245
+	syncBlock := w.Manager.SyncedTo()
+	syncBlockHeight := syncBlock.Height
+	nextBlockHeight := syncBlockHeight + 1
+
 	// Reference server.go:236
 	var coincaseAddr btcutil.Address
-	coincaseAddr, err = w.NewChangeAddress(req.account, waddrmgr.KeyScopeBIP0044)
+	coincaseAddr, err = w.NewAddress(req.account, waddrmgr.KeyScopeBIP0044)
 
-	coincaseTx, err := w.createCoincase(coincaseAddr, req.amount)
+	coincaseTx, err := w.createCoincase(coincaseAddr, req.amount, nextBlockHeight)
 	if err != nil {
 		return createPostDatedTxResponse{nil, err}
 	}
