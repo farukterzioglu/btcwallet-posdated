@@ -3248,6 +3248,71 @@ func (w *Wallet) SignTransaction(tx *wire.MsgTx, hashType txscript.SigHashType,
 	return signErrors, err
 }
 
+// publishTransaction is the private version of PublishTransaction which
+// contains the primary logic required for publishing a transaction, updating
+// the relevant database state, and finally possible removing the transaction
+// from the database (along with cleaning up all inputs used, and outputs
+// created) if the transaction is rejected by the back end.
+func (w *Wallet) publishCoincaseTransaction(tx *wire.MsgTx) ([]*chainhash.Hash, error) {
+	server, err := w.requireChainClient()
+	if err != nil {
+		return nil, err
+	}
+
+	// As we aim for this to be general reliable transaction broadcast API,
+	// we'll write this tx to disk as an unconfirmed transaction. This way,
+	// upon restarts, we'll always rebroadcast it, and also add it to our
+	// set of records.
+	txRec, err := wtxmgr.NewTxRecordFromMsgTx(tx, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	err = walletdb.Update(w.db, func(dbTx walletdb.ReadWriteTx) error {
+		return w.addRelevantTx(dbTx, txRec, nil)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	txid, err := server.SendRawCoincaseTx(tx, false)
+	switch {
+	case err == nil:
+		return txid, nil
+
+		// The following are errors returned from btcd's mempool.
+	case strings.Contains(err.Error(), "spent"):
+		fallthrough
+	case strings.Contains(err.Error(), "orphan"):
+		fallthrough
+	case strings.Contains(err.Error(), "conflict"):
+		fallthrough
+
+		// The following errors are returned from bitcoind's mempool.
+	case strings.Contains(err.Error(), "fee not met"):
+		fallthrough
+	case strings.Contains(err.Error(), "Missing inputs"):
+		fallthrough
+	case strings.Contains(err.Error(), "already in block chain"):
+		// If the transaction was rejected, then we'll remove it from
+		// the txstore, as otherwise, we'll attempt to continually
+		// re-broadcast it, and the utxo state of the wallet won't be
+		// accurate.
+		dbErr := walletdb.Update(w.db, func(dbTx walletdb.ReadWriteTx) error {
+			txmgrNs := dbTx.ReadWriteBucket(wtxmgrNamespaceKey)
+			return w.TxStore.RemoveUnminedTx(txmgrNs, txRec)
+		})
+		if dbErr != nil {
+			return nil, fmt.Errorf("unable to broadcast tx: %v, "+
+				"unable to remove invalid tx: %v", err, dbErr)
+		}
+
+		return nil, err
+
+	default:
+		return nil, err
+	}
+}
+
 // PublishTransaction sends the transaction to the consensus RPC server so it
 // can be propagated to other nodes and eventually mined.
 //

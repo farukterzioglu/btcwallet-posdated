@@ -23,17 +23,17 @@ func (w *Wallet) SendPostDated(addrStr string, amount int64, lockTime uint32,
 		return nil, err
 	}
 
-	postDatedhash, err := w.publishTransaction(createdTx.PostDatedTx)
+	_, err = w.publishTransaction(createdTx.PostDatedTx)
 	if err != nil {
 		return nil, err
 	}
 
-	coincaseHash, err := w.publishTransaction(createdTx.CoincaseTx)
+	hashes, err := w.publishCoincaseTransaction(createdTx.CoincaseTx)
 	if err != nil {
 		return nil, err
 	}
 
-	return []*chainhash.Hash{coincaseHash, postDatedhash}, nil
+	return hashes, nil
 }
 
 type AuthoredPostDatedTx struct {
