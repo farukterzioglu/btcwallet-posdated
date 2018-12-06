@@ -34,6 +34,7 @@ type Interface interface {
 	FilterBlocks(*FilterBlocksRequest) (*FilterBlocksResponse, error)
 	BlockStamp() (*waddrmgr.BlockStamp, error)
 	SendRawTransaction(*wire.MsgTx, bool) (*chainhash.Hash, error)
+	SendRawCoincaseTx(*wire.MsgTx, bool) ([]*chainhash.Hash, error)
 	Rescan(*chainhash.Hash, []btcutil.Address, map[wire.OutPoint]btcutil.Address) error
 	NotifyReceived([]btcutil.Address) error
 	NotifyBlocks() error

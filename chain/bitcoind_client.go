@@ -195,6 +195,12 @@ func (c *BitcoindClient) SendRawTransaction(tx *wire.MsgTx,
 	return c.chainConn.client.SendRawTransaction(tx, allowHighFees)
 }
 
+func (c *BitcoindClient) SendRawCoincaseTx(tx *wire.MsgTx,
+	allowHighFees bool) ([]*chainhash.Hash, error) {
+
+	return c.chainConn.client.SendRawCoincaseTx(tx, allowHighFees)
+}
+
 // Notifications returns a channel to retrieve notifications from.
 //
 // NOTE: This is part of the chain.Interface interface.

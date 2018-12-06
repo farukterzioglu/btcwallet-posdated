@@ -156,6 +156,13 @@ func (s *NeutrinoClient) GetBlockHeader(
 	return s.CS.GetBlockHeader(blockHash)
 }
 
+func (s *NeutrinoClient) SendRawCoincaseTx(tx *wire.MsgTx,
+	allowHighFees bool) ([]*chainhash.Hash, error) {
+
+	// TODO : Implement this
+	return nil, nil
+}
+
 // SendRawTransaction replicates the RPC client's SendRawTransaction command.
 func (s *NeutrinoClient) SendRawTransaction(tx *wire.MsgTx, allowHighFees bool) (
 	*chainhash.Hash, error) {
