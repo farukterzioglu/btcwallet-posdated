@@ -250,6 +250,104 @@ func NewUnsignedTransactionFromInput(credit *wtxmgr.Credit, output *wire.TxOut, 
 	}
 }
 
+func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxOut, relayFeePerKb btcutil.Amount,
+	fetchInputs InputSource, fetchChange ChangeSource) (*AuthoredTx, error) {
+	// Create unsigned tx
+	unsignedTransaction := &wire.MsgTx{
+		Version:  wire.PostDatedTxVersion,
+		LockTime: 0,
+	}
+
+	outpoint := wire.NewOutPoint(coincaseTx.Hash(), 0)
+	txIn := wire.NewTxIn(outpoint, nil, nil)
+
+	unsignedTransaction.AddTxIn(txIn)
+	unsignedTransaction.AddTxOut(output)
+
+	// Get amount from coincase
+	targetAmount := btcutil.Amount(coincaseTx.MsgTx().TxOut[0].Value)
+	currentInputValues := []btcutil.Amount{targetAmount}
+
+	// Get pkScript from coincase
+	currentScripts := [][]byte{coincaseTx.MsgTx().TxOut[0].PkScript}
+
+	// Find an eligible fee
+	estimatedSize := txsizes.EstimateVirtualSize(0, 1, 0,
+		unsignedTransaction.TxOut, true)
+	targetFee := txrules.FeeForSerializeSize(relayFeePerKb, estimatedSize)
+
+	for {
+		// Fetch input only for fee
+		feeInputAmount, feeInputs, feeInputValues, feeScripts, err := fetchInputs(targetFee)
+		if err != nil {
+			return nil, err
+		}
+
+		// Couldn't find eligible input for fee
+		if feeInputAmount < targetFee {
+			return nil, insufficientFundsError{}
+		}
+
+		// Calculate input values from fee & transaction to be transferred
+		inputAmount := feeInputAmount + targetAmount
+
+		unsignedTransaction.TxIn = append(unsignedTransaction.TxIn, feeInputs...)
+		currentInputValues = append(currentInputValues, feeInputValues...)
+		currentScripts = append(currentScripts, feeScripts...)
+
+		// We count the types of inputs, which we'll use to estimate
+		// the vsize of the transaction.
+		var nested, p2wpkh, p2pkh int
+		for _, pkScript := range currentScripts {
+			switch {
+			// If this is a p2sh output, we assume this is a
+			// nested P2WKH.
+			case txscript.IsPayToScriptHash(pkScript):
+				nested++
+			case txscript.IsPayToWitnessPubKeyHash(pkScript):
+				p2wpkh++
+			default:
+				p2pkh++
+			}
+		}
+
+		maxSignedSize := txsizes.EstimateVirtualSize(p2pkh, p2wpkh,
+			nested, unsignedTransaction.TxOut, true)
+		maxRequiredFee := txrules.FeeForSerializeSize(relayFeePerKb, maxSignedSize)
+		remainingAmount := inputAmount - targetAmount
+		if remainingAmount < maxRequiredFee {
+			targetFee = maxRequiredFee
+			continue
+		}
+
+		changeIndex := -1
+		changeAmount := inputAmount - targetAmount - maxRequiredFee
+		if changeAmount != 0 && !txrules.IsDustAmount(changeAmount,
+			txsizes.P2WPKHPkScriptSize, relayFeePerKb) {
+			changeScript, err := fetchChange()
+			if err != nil {
+				return nil, err
+			}
+			if len(changeScript) > txsizes.P2WPKHPkScriptSize {
+				return nil, errors.New("fee estimation requires change " +
+					"scripts no larger than P2WPKH output scripts")
+			}
+			change := wire.NewTxOut(int64(changeAmount), changeScript)
+			l := len(unsignedTransaction.TxOut)
+			unsignedTransaction.TxOut = append(unsignedTransaction.TxOut[:l:l], change)
+			changeIndex = l
+		}
+
+		return &AuthoredTx{
+			Tx:              unsignedTransaction,
+			PrevScripts:     currentScripts,
+			PrevInputValues: currentInputValues,
+			TotalInput:      inputAmount,
+			ChangeIndex:     changeIndex,
+		}, nil
+	}
+}
+
 // RandomizeOutputPosition randomizes the position of a transaction's output by
 // swapping it with a random output.  The new index is returned.  This should be
 // done before signing.

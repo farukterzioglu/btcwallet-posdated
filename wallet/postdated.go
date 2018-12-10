@@ -48,6 +48,7 @@ type (
 		address     string
 		amount      int64
 		lockTime    uint32
+		minconf     int32
 		feeSatPerKB btcutil.Amount
 		resp        chan createPostDatedTxResponse
 	}
@@ -93,35 +94,6 @@ out:
 		}
 	}
 	w.wg.Done()
-}
-
-func NewUnsignedTransactionFromCoincase(coincaseTx *btcutil.Tx, output *wire.TxOut) (*txauthor.AuthoredTx, error) {
-	// Create unsigned tx
-	unsignedTransaction := &wire.MsgTx{
-		Version:  wire.PostDatedTxVersion,
-		LockTime: 0,
-	}
-
-	outpoint := wire.NewOutPoint(coincaseTx.Hash(), 0)
-	txIn := wire.NewTxIn(outpoint, nil, nil)
-
-	unsignedTransaction.AddTxIn(txIn)
-	unsignedTransaction.AddTxOut(output)
-
-	// Get amount from coincase
-	amount := btcutil.Amount(coincaseTx.MsgTx().TxOut[0].Value)
-	currentInputValues := []btcutil.Amount{amount}
-
-	// Get pkScript from coincase
-	currentScripts := [][]byte{coincaseTx.MsgTx().TxOut[0].PkScript}
-
-	return &txauthor.AuthoredTx{
-		Tx:              unsignedTransaction,
-		PrevScripts:     currentScripts,
-		PrevInputValues: currentInputValues,
-		TotalInput:      amount,
-		ChangeIndex:     -1,
-	}, nil
 }
 
 // Reference : btcsuite\btcd\mining\mining.go:253
@@ -175,6 +147,11 @@ func (w *Wallet) createCoincase(coincaseAddr btcutil.Address, amount int64, next
 
 //
 func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDatedTxResponse {
+	chainClient, err := w.requireChainClient()
+	if err != nil {
+		return createPostDatedTxResponse{nil, err}
+	}
+
 	amount := btcutil.Amount(req.amount)
 	redeemOutput, err := makeOutput(req.address, amount, w.ChainParams())
 	if err != nil {
@@ -204,7 +181,36 @@ func (w *Wallet) createPostDatedTx(req createPostDatedTxRequest) createPostDated
 	err = walletdb.Update(w.db, func(dbtx walletdb.ReadWriteTx) error {
 		addrmgrNs := dbtx.ReadWriteBucket(waddrmgrNamespaceKey)
 
-		tx, err = NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput)
+		// Get current block's height and hash.
+		bs, err := chainClient.BlockStamp()
+		if err != nil {
+			return err
+		}
+
+		eligible, err := w.findEligibleOutputs(dbtx, req.account, req.minconf, bs)
+		if err != nil {
+			return err
+		}
+
+		inputSource := makeInputSource(eligible)
+		changeSource := func() ([]byte, error) {
+			// Derive the change output script.  As a hack to allow
+			// spending from the imported account, change addresses
+			// are created from account 0.
+			var changeAddr btcutil.Address
+			var err error
+			if req.account == waddrmgr.ImportedAddrAccount {
+				changeAddr, err = w.newChangeAddress(addrmgrNs, 0)
+			} else {
+				changeAddr, err = w.newChangeAddress(addrmgrNs, req.account)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return txscript.PayToAddrScript(changeAddr)
+		}
+
+		tx, err = txauthor.NewUnsignedTransactionFromCoincase(coincaseTx, redeemOutput, req.feeSatPerKB, inputSource, changeSource)
 		if err != nil {
 			return err
 		}
